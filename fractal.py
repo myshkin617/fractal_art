@@ -2,13 +2,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from scipy.integrate import solve_ivp
+import matplotlib.cm as cm
 
-# Constants (assuming l1=l2=m1=m2=1)
+# Parameters
 g = 9.81
-L1 = L2 = 1.0
-M1 = M2 = 1.0
+L1 = L2 = M1 = M2 = 1.0
+t_span = (0, 20)
+t_eval = np.linspace(*t_span, 1000)
+N = 10  # number of pendulums
 
-# System of ODEs
+# Generate slightly different initial θ2s
+initial_angles = np.linspace(np.pi/2, np.pi/2 + 0.1, N)
+
+# Store solutions
+trajectories = []
+
 def double_pendulum(t, y):
     θ1, z1, θ2, z2 = y
     Δ = θ2 - θ1
@@ -31,51 +39,42 @@ def double_pendulum(t, y):
 
     return [dθ1_dt, dz1_dt, dθ2_dt, dz2_dt]
 
-# Initial conditions: [θ1, θ1_dot, θ2, θ2_dot]
-y0 = [np.pi / 2, 0, np.pi / 2 + 0.01, 0]  # Slight offset to see chaos
+# Solve for each initial condition
+for θ2_0 in initial_angles:
+    y0 = [np.pi/2, 0, θ2_0, 0]
+    sol = solve_ivp(double_pendulum, t_span, y0, t_eval=t_eval)
+    θ1 = sol.y[0]
+    θ2 = sol.y[2]
+    x1 = L1 * np.sin(θ1)
+    y1 = -L1 * np.cos(θ1)
+    x2 = x1 + L2 * np.sin(θ2)
+    y2 = y1 - L2 * np.cos(θ2)
+    trajectories.append((x2, y2))
 
-# Time array
-t_span = (0, 20)
-t_eval = np.linspace(*t_span, 1000)
-
-# Solve ODE
-sol = solve_ivp(double_pendulum, t_span, y0, t_eval=t_eval)
-
-θ1 = sol.y[0]
-θ2 = sol.y[2]
-
-# Convert to (x, y) coordinates
-x1 = L1 * np.sin(θ1)
-y1 = -L1 * np.cos(θ1)
-x2 = x1 + L2 * np.sin(θ2)
-y2 = y1 - L2 * np.cos(θ2)
-
-# Set up animation
-fig, ax = plt.subplots(figsize=(6, 6))
-ax.set_xlim(-2.2, 2.2)
-ax.set_ylim(-2.2, 2.2)
+# Plotting setup
+fig, ax = plt.subplots(figsize=(8, 8))
+ax.set_xlim(-2.5, 2.5)
+ax.set_ylim(-2.5, 2.5)
 ax.set_aspect('equal')
 ax.axis('off')
 
-line, = ax.plot([], [], 'o-', lw=2, color='black')
-trace, = ax.plot([], [], lw=1, alpha=0.6, color='blue')
-trail_x, trail_y = [], []
+colors = cm.hsv(np.linspace(0, 1, N))  # rainbow colors
+lines = [ax.plot([], [], lw=1, color=colors[i])[0] for i in range(N)]
+trails_x = [[] for _ in range(N)]
+trails_y = [[] for _ in range(N)]
 
 def init():
-    line.set_data([], [])
-    trace.set_data([], [])
-    return line, trace
+    for line in lines:
+        line.set_data([], [])
+    return lines
 
-def update(i):
-    x = [0, x1[i], x2[i]]
-    y = [0, y1[i], y2[i]]
-    line.set_data(x, y)
-
-    trail_x.append(x2[i])
-    trail_y.append(y2[i])
-    trace.set_data(trail_x, trail_y)
-
-    return line, trace
+def update(frame):
+    for i in range(N):
+        x, y = trajectories[i]
+        trails_x[i].append(x[frame])
+        trails_y[i].append(y[frame])
+        lines[i].set_data(trails_x[i], trails_y[i])
+    return lines
 
 ani = FuncAnimation(fig, update, frames=len(t_eval), init_func=init, blit=True, interval=20)
 plt.show()
